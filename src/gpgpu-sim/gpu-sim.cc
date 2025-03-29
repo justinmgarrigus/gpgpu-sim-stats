@@ -794,6 +794,8 @@ void gpgpu_sim::launch(kernel_info_t *kinfo) {
   unsigned kernelID = kinfo->get_uid();
   unsigned long long streamID = kinfo->get_streamID();
 
+  current_kernel_name = kinfo->name();
+
   kernel_time_t kernel_time = {gpu_tot_sim_cycle + gpu_sim_cycle, 0};
   if (gpu_kernel_time.find(streamID) == gpu_kernel_time.end()) {
     std::map<unsigned, kernel_time_t> new_val;
@@ -1184,6 +1186,13 @@ bool sst_gpgpu_sim::active() {
   return false;
 }
 
+/* Clears the contents of a text file. */ 
+void clear_file(std::string fname) {
+  std::ofstream outfile; 
+  outfile.open(fname, std::ios::out | std::ios::trunc); 
+  outfile.close(); 
+}
+
 void gpgpu_sim::init() {
   // run a CUDA grid on the GPU microarchitecture simulator
   gpu_sim_cycle = 0;
@@ -1229,9 +1238,36 @@ void gpgpu_sim::init() {
   }
 
   if (g_network_mode) icnt_init();
+
+  // New stat-tracking: we maintain a list of buffers that are written to when
+  // different events occur. At the end of each kernel execution, we append 
+  // these buffers to a file. 
+  stat_fname_average_warp_occupancy = "warp_occupancy_stats.dat"; 
+  stat_fname_percent_sm = "sm_occupancy_stats.dat"; 
+  stat_fname_tensor_cycle = "tensor_cycle_stats.dat"; 
+  stat_fname_dram_cycle = "dram_access_stats.dat";
+  stat_fname_kernel_time = "kernel_time_stats.dat";
+
+  clear_file(stat_fname_average_warp_occupancy); 
+  clear_file(stat_fname_percent_sm); 
+  clear_file(stat_fname_tensor_cycle); 
+  clear_file(stat_fname_dram_cycle); 
+  clear_file(stat_fname_kernel_time); 
+}
+
+template <typename T>
+void append_to_file(std::string fname, std::vector<T> buffer) {
+  std::ofstream outfile;
+  outfile.open(fname, std::ios::out | std::ios::app);
+  for (const T& val : buffer) 
+    outfile << val << ",";
+  outfile.close();
 }
 
 void gpgpu_sim::update_stats() {
+  int kernel_start_time = gpu_tot_sim_cycle; 
+  int kernel_end_time = kernel_start_time + gpu_sim_cycle; 
+
   m_memory_stats->memlatstat_lat_pw();
   gpu_tot_sim_cycle += gpu_sim_cycle;
   gpu_tot_sim_insn += gpu_sim_insn;
@@ -1241,6 +1277,26 @@ void gpgpu_sim::update_stats() {
   partiton_reqs_in_parallel_util_total += partiton_reqs_in_parallel_util;
   gpu_tot_sim_cycle_parition_util += gpu_sim_cycle_parition_util;
   gpu_tot_occupancy += gpu_occupancy;
+
+  // Append the results of the previous kernel into the file.
+  append_to_file<float>(
+    stat_fname_average_warp_occupancy, stat_buffer_average_warp_occupancy);
+  append_to_file<float>(stat_fname_percent_sm, stat_buffer_percent_sm); 
+  append_to_file<int>(stat_fname_tensor_cycle, stat_buffer_tensor_cycle); 
+  append_to_file<int>(stat_fname_dram_cycle, stat_buffer_dram_access_cycle); 
+  
+  // Kernel time wasn't stored in a buffer, so we'll do that manually. 
+  std::ofstream kernel_outfile;
+  kernel_outfile.open(stat_fname_kernel_time, std::ios::out | std::ios::app); 
+  kernel_outfile << current_kernel_name << "," << kernel_start_time << "," << 
+    kernel_end_time << std::endl;
+  kernel_outfile.close();
+
+  // Clear the buffers.
+  stat_buffer_average_warp_occupancy.clear();
+  stat_buffer_percent_sm.clear(); 
+  stat_buffer_tensor_cycle.clear();
+  stat_buffer_dram_access_cycle.clear();
 
   gpu_sim_cycle = 0;
   partiton_reqs_in_parallel = 0;
@@ -2058,6 +2114,8 @@ void gpgpu_sim::cycle() {
   if (clock_mask & CORE) {
     // L1 cache + shader core pipeline stages
     m_power_stats->pwr_mem_stat->core_cache_stats[CURRENT_STAT_IDX].clear();
+    float warp_occupancy_total = 0;
+    float sm_occupancy_total = 0; 
     for (unsigned i = 0; i < m_shader_config->n_simt_clusters; i++) {
       if (m_cluster[i]->get_not_completed() || get_more_cta_left()) {
         m_cluster[i]->core_cycle();
@@ -2071,10 +2129,28 @@ void gpgpu_sim::cycle() {
         m_cluster[i]->get_cache_stats(
             m_power_stats->pwr_mem_stat->core_cache_stats[CURRENT_STAT_IDX]);
       }
-      m_cluster[i]->get_current_occupancy(
+      float result = m_cluster[i]->get_current_occupancy(
           gpu_occupancy.aggregate_warp_slot_filled,
           gpu_occupancy.aggregate_theoretical_warp_slots);
+      warp_occupancy_total += result;
+
+      sm_occupancy_total += (m_cluster[i]->get_n_active_sms() / 
+        m_shader_config->n_simt_cores_per_cluster);
     }
+
+    float warp_occupancy_average = warp_occupancy_total / 
+      m_shader_config->n_simt_clusters;
+    stat_buffer_average_warp_occupancy.push_back(warp_occupancy_average); 
+    
+    float sm_occupancy_average = sm_occupancy_total / 
+      m_shader_config->n_simt_clusters;
+    stat_buffer_percent_sm.push_back(sm_occupancy_average);
+
+    unsigned long long total_accesses = 0; 
+    for (int i = 0; i < m_memory_config->m_n_mem; i++)
+      total_accesses += m_memory_stats->total_n_access; 
+    stat_buffer_dram_access_cycle.push_back(total_accesses);
+
     float temp = 0;
     for (unsigned i = 0; i < m_shader_config->num_shader(); i++) {
       temp += m_shader_stats->m_pipeline_duty_cycle[i];

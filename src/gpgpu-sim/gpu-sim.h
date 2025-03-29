@@ -803,6 +803,19 @@ class gpgpu_sim : public gpgpu_t {
     m_functional_sim = false;
     m_functional_sim_kernel = NULL;
   }
+
+  std::string current_kernel_name;
+
+  std::vector<float> stat_buffer_average_warp_occupancy;
+  std::vector<float> stat_buffer_percent_sm;
+  std::vector<int> stat_buffer_tensor_cycle;
+  std::vector<int> stat_buffer_dram_access_cycle; 
+
+  std::string stat_fname_average_warp_occupancy; 
+  std::string stat_fname_percent_sm; 
+  std::string stat_fname_tensor_cycle; 
+  std::string stat_fname_dram_cycle;
+  std::string stat_fname_kernel_time; 
 };
 
 class exec_gpgpu_sim : public gpgpu_sim {
