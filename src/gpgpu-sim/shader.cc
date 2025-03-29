@@ -3259,6 +3259,14 @@ void warp_inst_t::print(FILE *fout) const {
   fprintf(fout, "\n");
 }
 void shader_core_ctx::incexecstat(warp_inst_t *&inst) {
+  if (inst->sp_op == TENSOR__OP) {
+    // Log that a tensor core instruction was issued so we can analyze it 
+    // later.
+    gpgpu_sim *sim = get_gpu(); 
+    unsigned long long cycle = sim->gpu_tot_sim_cycle + sim->gpu_sim_cycle; 
+    sim->stat_buffer_tensor_cycle.push_back(cycle);
+  }
+
   // Latency numbers for next operations are used to scale the power values
   // for special operations, according observations from microbenchmarking
   // TODO: put these numbers in the xml configuration
