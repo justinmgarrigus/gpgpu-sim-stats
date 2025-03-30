@@ -1247,12 +1247,14 @@ void gpgpu_sim::init() {
   stat_fname_tensor_cycle = "tensor_cycle_stats.dat"; 
   stat_fname_dram_cycle = "dram_access_stats.dat";
   stat_fname_kernel_time = "kernel_time_stats.dat";
+  stat_fname_registers = "registers.dat";
 
   clear_file(stat_fname_average_warp_occupancy); 
   clear_file(stat_fname_percent_sm); 
   clear_file(stat_fname_tensor_cycle); 
   clear_file(stat_fname_dram_cycle); 
   clear_file(stat_fname_kernel_time); 
+  clear_file(stat_fname_registers);
 }
 
 template <typename T>
@@ -1292,11 +1294,40 @@ void gpgpu_sim::update_stats() {
     kernel_end_time << std::endl;
   kernel_outfile.close();
 
+  // The registers buffer is also a bit special, so we can do that manually. 
+  std::ofstream register_outfile; 
+  register_outfile.open(stat_fname_registers, std::ios::out | std::ios::app); 
+  typedef std::unordered_map<unsigned long long, std::unordered_set<int>*> 
+    regmap_t; 
+  for (regmap_t::iterator it = stat_buffer_registers.begin(); 
+    it != stat_buffer_registers.end(); 
+    it++)
+  {
+    unsigned long long timestamp = it->first; 
+    std::unordered_set<int> regs = *(it->second);
+    if (regs.size() > 0) {
+      register_outfile << timestamp;
+      int counter = 0; 
+      for (const int& val : regs) 
+        register_outfile << (counter++ == 0 ? ":" : ",") << val;
+      register_outfile << std::endl; 
+    }
+  }
+  register_outfile.close();
+
   // Clear the buffers.
   stat_buffer_average_warp_occupancy.clear();
   stat_buffer_percent_sm.clear(); 
   stat_buffer_tensor_cycle.clear();
   stat_buffer_dram_access_cycle.clear();
+  for (regmap_t::iterator it = stat_buffer_registers.begin(); 
+    it != stat_buffer_registers.end(); 
+    it++) 
+  { 
+    std::unordered_set<int> *regs = it->second; 
+    delete regs;
+  }
+  stat_buffer_registers.clear();
 
   gpu_sim_cycle = 0;
   partiton_reqs_in_parallel = 0;

@@ -1044,6 +1044,8 @@ void shader_core_ctx::issue_warp(register_set &pipe_reg_set,
   m_warp[warp_id]->ibuffer_free();
   assert(next_inst->valid());
   **pipe_reg = *next_inst;  // static instruction information
+  (*pipe_reg)->sim = get_gpu();
+  (*pipe_reg)->shader_id = m_sid; 
   (*pipe_reg)->issue(
       active_mask, warp_id, m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle,
       m_warp[warp_id]->get_dynamic_warp_id(), sch_id,

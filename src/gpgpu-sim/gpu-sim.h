@@ -37,6 +37,7 @@
 #include <iostream>
 #include <list>
 #include <stdint.h>
+#include <unordered_set>
 #include "../abstract_hardware_model.h"
 #include "../option_parser.h"
 #include "../trace.h"
@@ -810,12 +811,15 @@ class gpgpu_sim : public gpgpu_t {
   std::vector<float> stat_buffer_percent_sm;
   std::vector<int> stat_buffer_tensor_cycle;
   std::vector<int> stat_buffer_dram_access_cycle; 
+  std::unordered_map<unsigned long long, std::unordered_set<int>*>
+    stat_buffer_registers; 
 
   std::string stat_fname_average_warp_occupancy; 
   std::string stat_fname_percent_sm; 
   std::string stat_fname_tensor_cycle; 
   std::string stat_fname_dram_cycle;
-  std::string stat_fname_kernel_time; 
+  std::string stat_fname_kernel_time;
+  std::string stat_fname_registers; 
 };
 
 class exec_gpgpu_sim : public gpgpu_sim {

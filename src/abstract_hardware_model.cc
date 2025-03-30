@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <iostream>
 #include <sstream>
+#include <unordered_set> 
 #include "../libcuda/gpgpu_context.h"
 #include "cuda-sim/cuda-sim.h"
 #include "cuda-sim/memory.h"
@@ -64,6 +65,20 @@ void warp_inst_t::issue(const active_mask_t &mask, unsigned warp_id,
   m_cache_hit = false;
   m_empty = false;
   m_scheduler_id = sch_id;
+  
+  std::cout << "Issuing an instruction..." << std::endl; 
+  int timestamp = sim->gpu_tot_sim_cycle + sim->gpu_sim_cycle;
+  std::unordered_set<int> *regs = new std::unordered_set<int>;
+  for (int i = 0; i < outcount; i++) regs->insert((shader_id << 20) | out[i]); 
+  for (int j = 0; j < incount; j++) regs->insert((shader_id << 20) | in[j]);
+  if (sim->stat_buffer_registers.count(timestamp)) {
+    // Already exists, so append to existing list.
+    std::unordered_set<int> *set = sim->stat_buffer_registers[timestamp];
+    for (const int& r : *regs) 
+      set->insert(r); 
+  } 
+  else sim->stat_buffer_registers[timestamp] = regs; 
+  std::cout << "Done issuing!" << std::endl; 
 }
 
 checkpoint::checkpoint() {

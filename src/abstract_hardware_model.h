@@ -1048,6 +1048,8 @@ class inst_t {
   unsigned data_size;  // what is the size of the word being operated on?
   memory_space_t space;
   cache_operator_type cache_op;
+  unsigned shader_id; 
+  class gpgpu_sim *sim;
 
  protected:
   bool m_decoded;
